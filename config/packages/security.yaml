@@ -4,26 +4,58 @@ security:
         Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface: 'auto'
     # https://symfony.com/doc/current/security.html#loading-the-user-the-user-provider
     providers:
-        # used to reload user from session & other features (e.g. switch_user)
-        app_user_provider:
+
+        app_ldap_user_provider:
+            ldap:
+                service: Symfony\Component\Ldap\Ldap
+                base_dn: 'dc=example,dc=com'
+                search_dn: 'cn=read-only-admin,dc=example,dc=com'
+                search_password: 'password'
+                default_roles: ROLE_USER
+                uid_key: uid
+                filter: '({uid_key}={username})'
+
+        app_entity_user_provider:
             entity:
                 class: App\Entity\User
                 property: email
+
+        # Define a chain provider
+        chain_provider:
+            chain:
+                providers: [ 'app_ldap_user_provider', 'app_entity_user_provider' ]
     firewalls:
         dev:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
             security: false
         main:
             lazy: true
-            provider: app_user_provider
+            provider: chain_provider
+
             form_login:
                 login_path: app_login
                 check_path: app_login
                 enable_csrf: true
-            # custom_authenticators:
-            # - App\Security\CustomAuthenticator
+
+            form_login_ldap:
+                login_path: app_login
+                check_path: app_login
+                service: Symfony\Component\Ldap\Ldap
+                #dn_string: 'uid={user_identifier},dc=example,dc=com'
+                dn_string: 'uid={username},dc=example,dc=com'
+
+            # entry_point: form_login_ldap
+            #custom_authenticator: App\Security\CustomAuthenticator
+            #entry_point: App\Security\CustomAuthenticator
+
             logout:
                 path: app_logout
+
+            remember_me:
+                secret: '%kernel.secret%'
+                lifetime: 604800
+                path: /
+                always_remember_me: true
                 # where to redirect after logout
                 # target: app_any_route
 
@@ -36,8 +68,8 @@ security:
     # Easy way to control access for large sections of your site
     # Note: Only the *first* access control that matches will be used
     access_control:
-        # - { path: ^/admin, roles: ROLE_ADMIN }
-        # - { path: ^/profile, roles: ROLE_USER }
+        - { path: ^/login$, roles: PUBLIC_ACCESS  }
+        - { path: ^/home, roles: ROLE_USER }
 
 when@test:
     security:
